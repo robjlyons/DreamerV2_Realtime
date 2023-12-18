@@ -1,172 +1,61 @@
-**Status:** Stable release
+# An Implementation Of DreamerV2 On Real Games
 
-[![PyPI](https://img.shields.io/pypi/v/dreamerv2.svg)](https://pypi.python.org/pypi/dreamerv2/#history)
+## Step 1 - Install Custom Env
 
-# Mastering Atari with Discrete World Models
+### Requirements
 
-Implementation of the [DreamerV2][website] agent in TensorFlow 2. Training
-curves for all 55 games are included.
+For windows only, other OS might just require some googling.
 
-<p align="center">
-<img width="90%" src="https://imgur.com/gO1rvEn.gif">
-</p>
-
-If you find this code useful, please reference in your paper:
+I strongly suggest setting up a conda env for this - [Creating Conda Envs](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands)
 
 ```
-@article{hafner2020dreamerv2,
-  title={Mastering Atari with Discrete World Models},
-  author={Hafner, Danijar and Lillicrap, Timothy and Norouzi, Mohammad and Ba, Jimmy},
-  journal={arXiv preprint arXiv:2010.02193},
-  year={2020}
-}
+pip install opencv-python numpy matplotlib gym pytessy pywin32
 ```
 
-[website]: https://danijar.com/dreamerv2
+Pytessy is used as an alternative to pytesseract for its speed whilst sacrificing accuracy. If you have issues installing pytessy then please let me know and I will try and help, otherwise try pytesseract instead.
 
-## Method
+### Setting up in Gym
 
-DreamerV2 is the first world model agent that achieves human-level performance
-on the Atari benchmark. DreamerV2 also outperforms the final performance of the
-top model-free agents Rainbow and IQN using the same amount of experience and
-computation. The implementation in this repository alternates between training
-the world model, training the policy, and collecting experience and runs on a
-single GPU.
+I then manually add the environment to gym
 
-![World Model Learning](https://imgur.com/GRC9QAw.png)
+- navigate to your conda environment - lib\site-packages\gym\envs\classic_control folder
+- Place retroarch.py here (from the env folder)
+- Open the init.py file in classic_control
+- Add the following line at the bottom
+```
+from gym.envs.classic_control.retroarch import RetroArch
+```
+- Go up to the gym\envs folder
+- Open the init.py file in envs
+- Add the following code at the bottom of the Classic section underneath Acrobat
+```
+register(
+    id='RetroArch-v0',
+    entry_point='gym.envs.classic_control:RetroArch',
+)
+```
+This allows dreamer to recognise the custom environment. It will be used as an atari env but I have placed it in classic control for 2 reasons, 1. the atari envs are registered differently and it will error if placed in the folder. 2. the atari env folder doesn't exist in newer gym versions so this allows the custom env to be used in newer versions of gym/gymnasium.
 
-DreamerV2 learns a model of the environment directly from high-dimensional
-input images. For this, it predicts ahead using compact learned states. The
-states consist of a deterministic part and several categorical variables that
-are sampled. The prior for these categoricals is learned through a KL loss. The
-world model is learned end-to-end via straight-through gradients, meaning that
-the gradient of the density is set to the gradient of the sample.
+## Step 2 - Install DreamerV2
 
-![Actor Critic Learning](https://imgur.com/wH9kJ2O.png)
+You can install dreamerV2 using the instructions in their [repository](https://github.com/danijar/dreamerv2)
 
-DreamerV2 learns actor and critic networks from imagined trajectories of latent
-states. The trajectories start at encoded states of previously encountered
-sequences. The world model then predicts ahead using the selected actions and
-its learned state prior. The critic is trained using temporal difference
-learning and the actor is trained to maximize the value function via reinforce
-and straight-through gradients.
+## Step 3 - Run Dreamer On Your Custom Env
 
-For more information:
+you can make any edits you want to the dream.py and/or the dreamerv2/configs.yaml files and then run:
 
-- [Google AI Blog post](https://ai.googleblog.com/2021/02/mastering-atari-with-discrete-world.html)
-- [Project website](https://danijar.com/dreamerv2/)
-- [Research paper](https://arxiv.org/pdf/2010.02193.pdf)
-
-## Using the Package
-
-The easiest way to run DreamerV2 on new environments is to install the package
-via `pip3 install dreamerv2`. The code automatically detects whether the
-environment uses discrete or continuous actions. Here is a usage example that
-trains DreamerV2 on the MiniGrid environment:
-
-```python
-import gym
-import gym_minigrid
-import dreamerv2.api as dv2
-
-config = dv2.defaults.update({
-    'logdir': '~/logdir/minigrid',
-    'log_every': 1e3,
-    'train_every': 10,
-    'prefill': 1e5,
-    'actor_ent': 3e-3,
-    'loss_scales.kl': 1.0,
-    'discount': 0.99,
-}).parse_flags()
-
-env = gym.make('MiniGrid-DoorKey-6x6-v0')
-env = gym_minigrid.wrappers.RGBImgPartialObsWrapper(env)
-dv2.train(env, config)
+```
+python dream.py
 ```
 
-## Manual Instructions
+## Basic Troubleshooting
 
-To modify the DreamerV2 agent, clone the repository and follow the instructions
-below. There is also a Dockerfile available, in case you do not want to install
-the dependencies on your system.
+First things first, I am running this exact configuration on a Windows machine (AMD Ryzen 3700X, Nvidia RTX3070ti, 32gb DDR4)
 
-Get dependencies:
+your mileage WILL vary depending on your specs. If you have less RAM then I would suggest lowering the replay capacity in configs.yaml (replay: {capacity: 1.5e6, ongoing: False, minlen: 50, maxlen: 50, prioritize_ends: True}).
 
-```sh
-pip3 install tensorflow==2.6.0 tensorflow_probability ruamel.yaml 'gym[atari]' dm_control
-```
+The algorithm will not learn if the custom env is not frame throttled. I have not tested throttling to 8 fps and then doubling the emulator speed. This WILL require better hardware to run for long periods.
 
-Train on Atari:
+## Other Games
 
-```sh
-python dreamerv2/train.py --logdir X:/Dreamer_log/logdir/atari/dreamerv2/1 --configs atari --task atari_retroarch
-```
-
-Train on DM Control:
-
-```sh
-python3 dreamerv2/train.py --logdir ~/logdir/dmc_walker_walk/dreamerv2/1 \
-  --configs dmc_vision --task dmc_walker_walk
-```
-
-Monitor results:
-
-```sh
-tensorboard --logdir ~/logdir
-```
-
-Generate plots:
-
-```sh
-python3 common/plot.py --indir ~/logdir --outdir ~/plots \
-  --xaxis step --yaxis eval_return --bins 1e6
-```
-
-## Docker Instructions
-
-The [Dockerfile](https://github.com/danijar/dreamerv2/blob/main/Dockerfile)
-lets you run DreamerV2 without installing its dependencies in your system. This
-requires you to have Docker with GPU access set up.
-
-Check your setup:
-
-```sh
-docker run -it --rm --gpus all tensorflow/tensorflow:2.4.2-gpu nvidia-smi
-```
-
-Train on Atari:
-
-```sh
-docker build -t dreamerv2 .
-docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
-  python3 dreamerv2/train.py --logdir /logdir/atari_pong/dreamerv2/1 \
-    --configs atari --task atari_pong
-```
-
-Train on DM Control:
-
-```sh
-docker build -t dreamerv2 . --build-arg MUJOCO_KEY="$(cat ~/.mujoco/mjkey.txt)"
-docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
-  python3 dreamerv2/train.py --logdir /logdir/dmc_walker_walk/dreamerv2/1 \
-    --configs dmc_vision --task dmc_walker_walk
-```
-
-## Tips
-
-- **Efficient debugging.** You can use the `debug` config as in `--configs
-atari debug`. This reduces the batch size, increases the evaluation
-frequency, and disables `tf.function` graph compilation for easy line-by-line
-debugging.
-
-- **Infinite gradient norms.** This is normal and described under loss scaling in
-the [mixed precision][mixed] guide. You can disable mixed precision by passing
-`--precision 32` to the training script. Mixed precision is faster but can in
-principle cause numerical instabilities.
-
-- **Accessing logged metrics.** The metrics are stored in both TensorBoard and
-JSON lines format. You can directly load them using `pandas.read_json()`. The
-plotting script also stores the binned and aggregated metrics of multiple runs
-into a single JSON file for easy manual plotting.
-
-[mixed]: https://www.tensorflow.org/guide/mixed_precision
+If you'd like to run this on other games then please refer to the retroarch.py file. I have documented the file with instructions on how to do this.
