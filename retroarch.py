@@ -1,3 +1,4 @@
+##### IMPORTS #####
 import gym
 import win32gui
 from PIL import ImageGrab, Image, ImageFilter
@@ -12,14 +13,16 @@ from pytessy.pytessy import PyTessy
 from collections import defaultdict
 from gym.utils import seeding
 
-wincap = WindowCapture('RetroArch Gearboy 3.3.0')
+##### SET GLOBAL VARIABLES #####
+wincap = WindowCapture('RetroArch Gearboy 3.3.0') # If changing game - run 'windows.py' to find the name of your game window and replace this
 keys = k.Keys()
 ocrReader = PyTessy()
 
-desired_fps = 5
+desired_fps = 5 # Set 1 FPS above the desired FPS as it drops 1 for some reason.
 frame_time = 1/desired_fps 
 
-
+##### GO-EXPLORE FUNCTIONS #####
+# Credit to Ryan Rudes (https://github.com/ryanrudes/minimal_goexplore)
 def cellfn(frame):
     cell = cv.cvtColor(frame, cv.COLOR_RGB2GRAY)
     cell = cv.resize(cell, (11, 8), interpolation = cv.INTER_AREA)
@@ -75,6 +78,7 @@ e1 = 0.001
 e2 = 0.00001
 
 ############# Regions Of Interest #############
+# These will need to be customised to your game, I use an image editor to find the coordinates needed to detect with either pytessy or light/dark pixel detection.
 
 def roi_1(screen): # Game Over
     roi_1 = screen[219:230, 122:356] # [y1:y2, x1:x2]
@@ -125,11 +129,11 @@ def replace_chars(text):
     return list_of_numbers
 
 class RetroArch(gym.Env):
+    # Custom game class - sets variables needed to initialise the gym environment
     def __init__(self):
         super().__init__()
-        self.window_title = 'RetroArch Gearboy 3.3.0'
-        self.action_space = gym.spaces.Discrete(18)
-        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(433, 476, 3), dtype=np.uint8)
+        self.action_space = gym.spaces.Discrete(18) # Will need to be customised to your game and equal the number of actions in the step function
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(433, 476, 3), dtype=np.uint8) # Shape will need to be customised to your game window size
         self.highscore = 0
         self.last_time = 0
 
@@ -173,7 +177,6 @@ class RetroArch(gym.Env):
     def step(self, action):
         
         start_time = time.time()
-        # Implement your environment's logic here
         observation = wincap.get_screenshot()
         self.frames += 1
         reward = 0
@@ -182,16 +185,19 @@ class RetroArch(gym.Env):
         self.trajectory.append(action)
 
         ### SCORE ###
+        # Tries the score roi (pytessy is fast but inconsistent)
         try:
             score = roi_4(observation)
             score = int(score)
         except:
             score = 0
-
+            
+        # Reward is only applied if the score is greater than highscore. If this is not done then the reward is applied every step, exponentially and agent will not learn
         if score > self.highscore:
             self.highscore = score
             reward = score / 100
 
+        # Counter system used to end episode early if agent stands still or gets stuck for too long. Credit to Lucas Thompson (https://gitlab.com/lucasrthompson/Sonic-Bot-In-OpenAI-and-NEAT) 
         if score > self.max_reward:
             self.max_reward = score
             self.counter = 0
@@ -199,6 +205,7 @@ class RetroArch(gym.Env):
             self.counter += 1
 
         ### LIVES LOST ###
+        # Light/Dark pixel detection is used for consistency
         lives = roi_2(observation)
         lives_light_pix = np.sum(lives >= 50)
         #print('lives_light_pix', lives_light_pix)
@@ -213,12 +220,14 @@ class RetroArch(gym.Env):
             done = True
 
         ### GAME OVER ###
+        # Light/Dark pixel detection is used for consistency
         game = roi_1(observation)
         number_of_light_pix = np.sum(game >= 50)
         number_of_dark_pix = np.sum(game <= 49)
         if number_of_light_pix == 4176 and number_of_dark_pix == 3546 or self.counter == 1000:
             done = True
         else:
+            # Go-Explore cell function used for a more 'intelligent' exploration system - Thanks again to Ryan Rudes
             cell = cellfn(observation)
             cellhash = hashfn(cell)
             cell = self.archive[cellhash]
@@ -230,10 +239,11 @@ class RetroArch(gym.Env):
                 cell.times_chosen = 0
                 cell.times_chosen_since_new = 0
                 found_new_cell = True
-                reward += 0.1
+                reward += 0.1 # Small reward added
 
-        # Actions
-        if action == 0:
+        #### ACTIONS #####
+        # These will need to be customised to your game controls and are set to be fairly self explanitory - Thanks to Sentdex (https://github.com/Sentdex/pygta5)
+        if action == 0: # Release all possible keys
             keys.directKey("RIGHT", keys.key_release)
             keys.directKey("LEFT", keys.key_release)
             keys.directKey("DOWN", keys.key_release)
@@ -287,7 +297,7 @@ class RetroArch(gym.Env):
             keys.directKey("RIGHT")
 
         info = {}
-        reward += -0.01 * 1
+        reward += -0.01 * 1 # In my game I punish the AI a little every step to encourage speed
         #print('reward', reward)
 
         elapsed = time.time() - start_time
@@ -300,30 +310,15 @@ class RetroArch(gym.Env):
         return observation, reward, done, info
 
     def reset(self):
-
+        # RESETS THE ENVIRONMENT AND GAME
         self.iterations += 1
-        print ("Iterations: %d, Frames: %d, Max Reward: %d, Game FPS: %d" % (self.iterations, self.frames, self.highscore, self.fps))
+        print ("Iterations: %d, Frames: %d, Max Reward: %d, Game FPS: %d" % (self.iterations, self.frames, self.highscore, self.fps)) # Taken from Ryan Rudes to keep an eye on some stats each iteration
 
-        '''
-        if self.found_new_cell and self.iteration > 0:
-            restore_cell.times_chosen_since_new = 0
-        
-        try:
-            self.iteration += 1
-            scores = np.array([cell.score for cell in self.archive.values()])
-            hashes = [*self.archive]
-            probs = scores / scores.sum()
-            restore = np.random.choice(hashes, p = probs)
-            restore_cell = self.archive[restore]
-            #ram, score, trajectory = restore_cell.choose()
-        except:
-            pass
-        '''
-
-        # Restart RetroArch game
+        # Restart RetroArch game - You will need to customise this depending on your game menu system
         keys.directKey("H")
         time.sleep(0.1)
         keys.directKey("H", keys.key_release)
+        # Waits for Super Mario Land menu screen before pressing RETURN to start the game
         time.sleep(0.5)
         keys.directKey("RETURN")
         time.sleep(0.1)
@@ -335,7 +330,7 @@ class RetroArch(gym.Env):
         self.max_reward = 0
         self.counter = 0
 
-        self.archive = defaultdict(lambda: Cell())  
+        self.archive = defaultdict(lambda: Cell()) # reset Go-Explore archive so exploration starts again
         self.trajectory = []
         self.found_new_cell = False
 
@@ -347,7 +342,7 @@ class RetroArch(gym.Env):
         pass
 
     def get_action_meanings(self):
-
+        # I'm not certain this is required but I suggest doing it anyway. Better safe than having to write extra code.
         return {0: "NOOP",
                 1: "DPAD_RIGHT",
                 2: "DPAD_LEFT",
