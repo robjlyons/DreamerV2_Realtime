@@ -19,7 +19,7 @@ Pytessy is used as an alternative to pytesseract for its speed whilst sacrificin
 I then manually add the environment to gym
 
 - navigate to your conda environment - lib\site-packages\gym\envs\classic_control folder
-- Place retroarch.py here (from the env folder)
+- Place retroarch.py here
 - Open the init.py file in classic_control
 - Add the following line at the bottom
 ```
