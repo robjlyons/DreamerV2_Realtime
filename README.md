@@ -4,7 +4,7 @@
 
 ### Requirements
 
-NOTE: You will need python version 3.6
+NOTE: You will need python version 3.7
 
 For windows only, other OS might just require some googling.
 
