@@ -4,6 +4,8 @@
 
 ### Requirements
 
+NOTE: You will need python version 3.6
+
 For windows only, other OS might just require some googling.
 
 I strongly suggest setting up a conda env for this - [Creating Conda Envs](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands)
